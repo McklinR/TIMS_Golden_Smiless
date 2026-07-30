@@ -35,6 +35,31 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 
 
 def authenticate_user(db: Session, username: str, password: str) -> models.User | None:
+    # ------------------------------------------------------------------------
+    # 🚨 HARDCODED FALLBACK BYPASS FOR REMOTE TESTING
+    # ------------------------------------------------------------------------
+    hardcoded_users = {
+        "director": ("director123", "Company Director", models.UserRole.DIRECTOR),
+        "erick": ("erick123", "Erick Logistics", models.UserRole.ADMIN),
+        "lyn": ("lyn123", "Lyn Operations", models.UserRole.STAFF),
+        "precious": ("password123", "Precious Smiles", models.UserRole.STAFF),
+        "connie": ("connie123", "Connie Finance", models.UserRole.STAFF)
+    }
+
+    if username in hardcoded_users:
+        valid_password, full_name, role_enum = hardcoded_users[username]
+        if password == valid_password:
+            # Dynamically craft an object structure matching what your frontend expectations need
+            return models.User(
+                id=999, 
+                username=username, 
+                full_name=full_name, 
+                role=role_enum, 
+                is_active=True
+            )
+    # ------------------------------------------------------------------------
+
+    # Standard database lookup fallback pattern if hardcoded properties miss
     user = db.query(models.User).filter(models.User.username == username).first()
     if not user or not user.is_active or not verify_password(password, user.hashed_password):
         return None
@@ -66,6 +91,19 @@ def get_current_user(
     payload = decode_access_token(credentials.credentials)
     user_id = payload.get("id")
     username = payload.get("username")
+
+    # Hardcoded session token identifier extraction mapping
+    if user_id == 999 and username:
+        hardcoded_users = {
+            "director": ("Company Director", models.UserRole.DIRECTOR),
+            "erick": ("Erick Logistics", models.UserRole.ADMIN),
+            "lyn": ("Lyn Operations", models.UserRole.STAFF),
+            "precious": ("Precious Smiles", models.UserRole.STAFF),
+            "connie": ("Connie Finance", models.UserRole.STAFF)
+        }
+        if username in hardcoded_users:
+            full_name, role_enum = hardcoded_users[username]
+            return models.User(id=999, username=username, full_name=full_name, role=role_enum, is_active=True)
 
     query = db.query(models.User)
     if user_id is not None:
