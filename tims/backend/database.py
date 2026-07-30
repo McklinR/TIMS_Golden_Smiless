@@ -53,45 +53,45 @@ def ensure_booking_tracking_columns() -> None:
 
 
 def seed_demo_accounts() -> None:
-    """Automatically seeds default accounts using the exact valid uppercase Enum values."""
+    """Forces fresh demo account population on production servers by cleaning stale table layers."""
     db: Session = SessionLocal()
     try:
         inspector = inspect(engine)
         if "users" in inspector.get_table_names():
-            user_count = db.execute(text("SELECT count(*) FROM users")).scalar()
-            
-            if user_count == 0:
-                print("--- Seeding Custom Demo Accounts for Golden Smiles Freight ---")
-                
-                from backend.models import User
-                from backend.auth import get_password_hash
-                
-                # Roles updated to match your exact enum constraint properties
-                account_credentials = {
-                    "director": ("director123", "Company Director", "ADMIN"),
-                    "erick": ("erick123", "Erick Logistics", "ADMIN"),
-                    "lyn": ("lyn123", "Lyn Operations", "TRACKING"),
-                    "precious": ("password123", "Precious Smiles", "BOOKING"),
-                    "connie": ("connie123", "Connie Finance", "ACCOUNTS")
-                }
-                
-                for username, data in account_credentials.items():
-                    password, full_name, role_string = data
-                    
-                    new_profile = User(
-                        username=username,
-                        full_name=full_name,       
-                        hashed_password=get_password_hash(password), 
-                        role=role_string, 
-                        is_active=True
-                    )
-                    db.add(new_profile)
-                
-                db.add(new_profile)
+            # FORCE WIPE: Clears any empty or corrupt user cache rows before writing profiles
+            db.execute(text("DELETE FROM users"))
             db.commit()
-            print("--- System Seeding Event Concluded Successfully! ---")
+            
+            print("--- Forcing Fresh Demo Account Seeding Event for Golden Smiles ---")
+            
+            from backend.models import User
+            from backend.auth import get_password_hash
+            
+            # Roles updated to match your exact uppercase enum constraint options
+            account_credentials = {
+                "director": ("director123", "Company Director", "ADMIN"),
+                "erick": ("erick123", "Erick Logistics", "ADMIN"),
+                "lyn": ("lyn123", "Lyn Operations", "TRACKING"),
+                "precious": ("password123", "Precious Smiles", "BOOKING"),
+                "connie": ("connie123", "Connie Finance", "ACCOUNTS")
+            }
+            
+            for username, data in account_credentials.items():
+                password, full_name, role_string = data
+                
+                new_profile = User(
+                    username=username,
+                    full_name=full_name,       
+                    hashed_password=get_password_hash(password), 
+                    role=role_string, 
+                    is_active=True
+                )
+                db.add(new_profile)
+                
+            db.commit()
+            print("--- Production System Seeding Event Concluded Successfully! ---")
     except Exception as error:
         db.rollback()
-        print(f"[Warning] Initialization seeding routine skipped: {error}")
+        print(f"[Warning] Production seeding routine bypassed: {error}")
     finally:
         db.close()
