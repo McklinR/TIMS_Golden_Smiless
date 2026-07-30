@@ -13,7 +13,7 @@ from backend.database import get_db
 
 SECRET_KEY = os.getenv("TIMS_SECRET_KEY", "dev-secret-change-me-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = 8
+ACCESS_TOKEN_EXPIRE_HOHours = 8
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -29,35 +29,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     payload = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(hours=ACCESS_TOKEN_EXPIRE_HOHours))
     payload.update({"exp": expire})
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def authenticate_user(db: Session, username: str, password: str) -> models.User | None:
-    # ------------------------------------------------------------------------
-    # 🚨 FIXED HARDCODED FALLBACK BYPASS USING SYSTEM-VALID ENUMS
-    # ------------------------------------------------------------------------
-    hardcoded_users = {
-        "director": ("director123", "Company Director", models.UserRole.ADMIN),
-        "erick": ("erick123", "Erick Logistics", models.UserRole.ADMIN),
-        "lyn": ("lyn123", "Lyn Operations", models.UserRole.TRACKING),
-        "precious": ("password123", "Precious Smiles", models.UserRole.BOOKING),
-        "connie": ("connie123", "Connie Finance", models.UserRole.ACCOUNTS)
-    }
-
-    if username in hardcoded_users:
-        valid_password, full_name, role_enum = hardcoded_users[username]
-        if password == valid_password:
-            return models.User(
-                id=999, 
-                username=username, 
-                full_name=full_name, 
-                role=role_enum, 
-                is_active=True
-            )
-    # ------------------------------------------------------------------------
-
+    """Queries the database to validate the username and hashed password safely."""
     user = db.query(models.User).filter(models.User.username == username).first()
     if not user or not user.is_active or not verify_password(password, user.hashed_password):
         return None
@@ -89,18 +67,6 @@ def get_current_user(
     payload = decode_access_token(credentials.credentials)
     user_id = payload.get("id")
     username = payload.get("username")
-
-    if user_id == 999 and username:
-        hardcoded_users = {
-            "director": ("Company Director", models.UserRole.ADMIN),
-            "erick": ("Erick Logistics", models.UserRole.ADMIN),
-            "lyn": ("Lyn Operations", models.UserRole.TRACKING),
-            "precious": ("Precious Smiles", models.UserRole.BOOKING),
-            "connie": ("Connie Finance", models.UserRole.ACCOUNTS)
-        }
-        if username in hardcoded_users:
-            full_name, role_enum = hardcoded_users[username]
-            return models.User(id=999, username=username, full_name=full_name, role=role_enum, is_active=True)
 
     query = db.query(models.User)
     if user_id is not None:
