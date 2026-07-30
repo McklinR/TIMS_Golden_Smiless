@@ -36,20 +36,19 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 
 def authenticate_user(db: Session, username: str, password: str) -> models.User | None:
     # ------------------------------------------------------------------------
-    # 🚨 HARDCODED FALLBACK BYPASS FOR REMOTE TESTING
+    # 🚨 FIXED HARDCODED FALLBACK BYPASS USING SYSTEM-VALID ENUMS
     # ------------------------------------------------------------------------
     hardcoded_users = {
-        "director": ("director123", "Company Director", models.UserRole.DIRECTOR),
+        "director": ("director123", "Company Director", models.UserRole.ADMIN),
         "erick": ("erick123", "Erick Logistics", models.UserRole.ADMIN),
-        "lyn": ("lyn123", "Lyn Operations", models.UserRole.STAFF),
-        "precious": ("password123", "Precious Smiles", models.UserRole.STAFF),
-        "connie": ("connie123", "Connie Finance", models.UserRole.STAFF)
+        "lyn": ("lyn123", "Lyn Operations", models.UserRole.TRACKING),
+        "precious": ("password123", "Precious Smiles", models.UserRole.BOOKING),
+        "connie": ("connie123", "Connie Finance", models.UserRole.ACCOUNTS)
     }
 
     if username in hardcoded_users:
         valid_password, full_name, role_enum = hardcoded_users[username]
         if password == valid_password:
-            # Dynamically craft an object structure matching what your frontend expectations need
             return models.User(
                 id=999, 
                 username=username, 
@@ -59,7 +58,6 @@ def authenticate_user(db: Session, username: str, password: str) -> models.User 
             )
     # ------------------------------------------------------------------------
 
-    # Standard database lookup fallback pattern if hardcoded properties miss
     user = db.query(models.User).filter(models.User.username == username).first()
     if not user or not user.is_active or not verify_password(password, user.hashed_password):
         return None
@@ -92,14 +90,13 @@ def get_current_user(
     user_id = payload.get("id")
     username = payload.get("username")
 
-    # Hardcoded session token identifier extraction mapping
     if user_id == 999 and username:
         hardcoded_users = {
-            "director": ("Company Director", models.UserRole.DIRECTOR),
+            "director": ("Company Director", models.UserRole.ADMIN),
             "erick": ("Erick Logistics", models.UserRole.ADMIN),
-            "lyn": ("Lyn Operations", models.UserRole.STAFF),
-            "precious": ("Precious Smiles", models.UserRole.STAFF),
-            "connie": ("Connie Finance", models.UserRole.STAFF)
+            "lyn": ("Lyn Operations", models.UserRole.TRACKING),
+            "precious": ("Precious Smiles", models.UserRole.BOOKING),
+            "connie": ("Connie Finance", models.UserRole.ACCOUNTS)
         }
         if username in hardcoded_users:
             full_name, role_enum = hardcoded_users[username]
