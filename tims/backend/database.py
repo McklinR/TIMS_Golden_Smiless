@@ -1,10 +1,6 @@
 """
 Database configuration for TIMS (Transport Management System).
 Golden Smiles Freight and Distribution.
-
-Uses SQLite by default for zero-config local development. Swap the
-SQLALCHEMY_DATABASE_URL for a Postgres/MySQL DSN in production by setting
-the TIMS_DATABASE_URL environment variable.
 """
 import os
 from sqlalchemy import create_engine
@@ -57,40 +53,45 @@ def ensure_booking_tracking_columns() -> None:
 
 
 def seed_demo_accounts() -> None:
-    """Automatically seeds the 5 default demo accounts into a fresh production database."""
-    # Delayed internal structural imports to protect against application circular dependency locks
-    try:
-        from backend.models import User
-        from backend.routers.auth_router import get_password_hash
-    except ImportError:
-        # Fallback to absolute paths if running directly inside the nested tims/ directory sub-context
-        from tims.backend.models import User
-        from tims.backend.routers.auth_router import get_password_hash
-
+    """Automatically seeds default accounts using the exact valid uppercase Enum values."""
     db: Session = SessionLocal()
     try:
-        # Check if the users data table exists and is currently completely empty
         inspector = inspect(engine)
-        if "users" in inspector.get_table_names() and db.query(User).count() == 0:
-            print("--- Seeding Demo Accounts for Golden Smiles Freight ---")
-            demo_users = ["director", "erick", "lyn", "precious", "connie"]
+        if "users" in inspector.get_table_names():
+            user_count = db.execute(text("SELECT count(*) FROM users")).scalar()
             
-            # Encrypts a standardized password your auth_router middleware engine can safely decode
-            hashed_fallback_password = get_password_hash("password123")
-            
-            for username in demo_users:
-                new_profile = User(
-                    username=username,
-                    email=f"{username}@goldensmiles.com",
-                    hashed_password=hashed_fallback_password,
-                    is_active=True
-                )
+            if user_count == 0:
+                print("--- Seeding Custom Demo Accounts for Golden Smiles Freight ---")
+                
+                from backend.models import User
+                from backend.auth import get_password_hash
+                
+                # Roles updated to match your exact enum constraint properties
+                account_credentials = {
+                    "director": ("director123", "Company Director", "ADMIN"),
+                    "erick": ("erick123", "Erick Logistics", "ADMIN"),
+                    "lyn": ("lyn123", "Lyn Operations", "TRACKING"),
+                    "precious": ("password123", "Precious Smiles", "BOOKING"),
+                    "connie": ("connie123", "Connie Finance", "ACCOUNTS")
+                }
+                
+                for username, data in account_credentials.items():
+                    password, full_name, role_string = data
+                    
+                    new_profile = User(
+                        username=username,
+                        full_name=full_name,       
+                        hashed_password=get_password_hash(password), 
+                        role=role_string, 
+                        is_active=True
+                    )
+                    db.add(new_profile)
+                
                 db.add(new_profile)
-            
             db.commit()
             print("--- System Seeding Event Concluded Successfully! ---")
     except Exception as error:
         db.rollback()
-        print(f"[Warning] Initialization seeding routine skipped or halted: {error}")
+        print(f"[Warning] Initialization seeding routine skipped: {error}")
     finally:
         db.close()
