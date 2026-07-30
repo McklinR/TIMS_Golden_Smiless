@@ -9,7 +9,7 @@ the TIMS_DATABASE_URL environment variable.
 import os
 from sqlalchemy import create_engine
 from sqlalchemy import inspect, text
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker, declarative_base, Session
 
 SQLALCHEMY_DATABASE_URL = os.getenv("TIMS_DATABASE_URL", "sqlite:///./tims.db")
 
@@ -54,3 +54,43 @@ def ensure_booking_tracking_columns() -> None:
     with engine.begin() as connection:
         for statement in alters:
             connection.execute(text(statement))
+
+
+def seed_demo_accounts() -> None:
+    """Automatically seeds the 5 default demo accounts into a fresh production database."""
+    # Delayed internal structural imports to protect against application circular dependency locks
+    try:
+        from backend.models import User
+        from backend.routers.auth_router import get_password_hash
+    except ImportError:
+        # Fallback to absolute paths if running directly inside the nested tims/ directory sub-context
+        from tims.backend.models import User
+        from tims.backend.routers.auth_router import get_password_hash
+
+    db: Session = SessionLocal()
+    try:
+        # Check if the users data table exists and is currently completely empty
+        inspector = inspect(engine)
+        if "users" in inspector.get_table_names() and db.query(User).count() == 0:
+            print("--- Seeding Demo Accounts for Golden Smiles Freight ---")
+            demo_users = ["director", "erick", "lyn", "precious", "connie"]
+            
+            # Encrypts a standardized password your auth_router middleware engine can safely decode
+            hashed_fallback_password = get_password_hash("password123")
+            
+            for username in demo_users:
+                new_profile = User(
+                    username=username,
+                    email=f"{username}@goldensmiles.com",
+                    hashed_password=hashed_fallback_password,
+                    is_active=True
+                )
+                db.add(new_profile)
+            
+            db.commit()
+            print("--- System Seeding Event Concluded Successfully! ---")
+    except Exception as error:
+        db.rollback()
+        print(f"[Warning] Initialization seeding routine skipped or halted: {error}")
+    finally:
+        db.close()

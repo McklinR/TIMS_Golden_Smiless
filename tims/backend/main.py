@@ -13,11 +13,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from backend.database import Base, engine, ensure_booking_tracking_columns
+# Added 'seed_demo_accounts' to the database imports
+from backend.database import Base, engine, ensure_booking_tracking_columns, seed_demo_accounts
 from backend.routers import auth_router, partners, bookings, loading, offloading, tracking, dashboard
 
+# Initialize database, apply structural alterations, and seed the accounts
 Base.metadata.create_all(bind=engine)
 ensure_booking_tracking_columns()
+seed_demo_accounts()
 
 app = FastAPI(
     title="TIMS - Golden Smiles Freight and Distribution",
