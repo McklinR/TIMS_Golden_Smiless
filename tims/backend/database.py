@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 
-SQLALCHEMY_DATABASE_URL = os.getenv("TIMS_DATABASE_URL", "sqlite:///./tims.db")
+SQLALCHEMY_DATABASE_URL = os.getenv("TIMS_DATABASE_URL", "sqlite:///./tims_prod.db")
 
 connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
 
