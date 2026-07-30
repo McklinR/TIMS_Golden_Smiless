@@ -62,7 +62,35 @@ function logout() {
   document.getElementById("login-screen").classList.remove("hidden");
 }
 
+// =================================================================
+// 🚨 FRONTEND PITCH SHORTCUT - BYPASSES THE SERVER COMPLETELY
+// =================================================================
 async function login(username, password) {
+  // Exact user profiles required for your pitch setup
+  const pitchUsers = {
+    "director": { role: "ADMIN", name: "Company Director", pass: "director123" },
+    "erick": { role: "ADMIN", name: "Erick Logistics", pass: "erick123" },
+    "lyn": { role: "TRACKING", name: "Lyn Operations", pass: "lyn123" },
+    "precious": { role: "BOOKING", name: "Precious Smiles", pass: "password123" },
+    "connie": { role: "ACCOUNTS", name: "Connie Finance", pass: "connie123" }
+  };
+
+  const cleanUser = username.toLowerCase().trim();
+  const user = pitchUsers[cleanUser];
+
+  // If the credentials match our pitch profiles, log them in instantly in the browser
+  if (user && user.pass === password) {
+    state.token = "pitch_bypass_token_success";
+    state.role = user.role;
+    state.fullName = user.name;
+
+    localStorage.setItem("tims_token", state.token);
+    localStorage.setItem("tims_role", state.role);
+    localStorage.setItem("tims_name", state.fullName);
+    return; // Stop here and skip the broken backend database entirely
+  }
+
+  // Fallback to the server only if someone types a non-pitch username
   const data = await api("/auth/login", { method: "POST", form: { username, password } });
   state.token = data.access_token;
   state.role = data.role;
@@ -71,22 +99,7 @@ async function login(username, password) {
   localStorage.setItem("tims_role", state.role);
   localStorage.setItem("tims_name", state.fullName);
 }
-
-document.getElementById("login-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const username = document.getElementById("login-username").value.trim();
-  const password = document.getElementById("login-password").value;
-  const errEl = document.getElementById("login-error");
-  errEl.textContent = "";
-  try {
-    await login(username, password);
-    enterApp();
-  } catch (err) {
-    errEl.textContent = err.message;
-  }
-});
-
-document.getElementById("logout-btn").addEventListener("click", logout);
+// =================================================================
 
 // ---------------------------------------------------------------
 // Shell / nav
