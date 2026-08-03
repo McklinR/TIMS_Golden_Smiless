@@ -15,10 +15,13 @@ def _get_database_url() -> str:
     if not db_url:
         return "sqlite:///./tims.db"
 
+    db_url = db_url.strip()
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
     elif db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    elif db_url.startswith("sqlite://"):
+        return db_url
 
     return db_url
 
@@ -94,7 +97,10 @@ def seed_demo_accounts() -> None:
     try:
         inspector = inspect(engine)
         if "users" not in inspector.get_table_names():
-            return
+            Base.metadata.create_all(bind=engine)
+            inspector = inspect(engine)
+            if "users" not in inspector.get_table_names():
+                return
 
         print("--- Seeding baseline demo accounts ---")
 

@@ -58,3 +58,20 @@ if FRONTEND_DIR.exists():
 @app.get("/api/health")
 def health_check():
     return {"status": "ok", "system": "TIMS", "company": "Golden Smiles Freight and Distribution"}
+
+
+@app.get("/api/debug/db")
+def debug_db():
+    from backend.database import SessionLocal
+    from backend.models import User
+
+    db = SessionLocal()
+    try:
+        user_count = db.query(User).count()
+        return {
+            "database_url": str(__import__("os").getenv("TIMS_DATABASE_URL") or __import__("os").getenv("DATABASE_URL") or "sqlite:///./tims.db"),
+            "user_count": user_count,
+            "users": [user.username for user in db.query(User).order_by(User.username).all()],
+        }
+    finally:
+        db.close()
