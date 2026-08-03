@@ -22,7 +22,7 @@ def create_client(payload: schemas.ClientCreate, db: Session = Depends(get_db),
 
 @router.get("/clients", response_model=list[schemas.ClientOut])
 def list_clients(db: Session = Depends(get_db),
-                  _=Depends(auth.require_roles(UserRole.ADMIN, UserRole.ACCOUNTS))):
+                  _=Depends(auth.require_roles(UserRole.ADMIN, UserRole.ACCOUNTS, UserRole.BOOKING))):
     return db.query(models.Client).all()
 
 

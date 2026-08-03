@@ -206,6 +206,110 @@ function fmtTonnes(n) { return n == null ? "—" : `${Number(n).toLocaleString(u
 function fmtDate(d) { if (!d) return "—"; const dt = new Date(d); return dt.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
 function pill(status) { return `<span class="pill pill-${status}">${status.replace(/_/g, " ")}</span>`; }
 
+function safeStatus(status) {
+  return String(status || "").replace(/_/g, " ");
+}
+
+function setFormMessage(form, message, kind = "success") {
+  if (!form) return;
+  let el = form.querySelector(".form-message");
+  if (!el) {
+    el = document.createElement("div");
+    el.className = "form-message";
+    el.setAttribute("aria-live", "polite");
+    form.appendChild(el);
+  }
+  el.textContent = message;
+  el.dataset.kind = kind;
+}
+
+function clearFormMessage(form) {
+  if (!form) return;
+  const el = form.querySelector(".form-message");
+  if (el) {
+    el.textContent = "";
+    el.dataset.kind = "";
+  }
+}
+
+function bookingLookupMaps(bookings, clients = [], transporters = []) {
+  const clientMap = new Map(clients.map(client => [String(client.id), client]));
+  const transporterMap = new Map(transporters.map(transporter => [String(transporter.id), transporter]));
+  const bookingMap = new Map(bookings.map(booking => [String(booking.id), booking]));
+  return { clientMap, transporterMap, bookingMap };
+}
+
+function bookingSummaryCards(bookings) {
+  const counts = bookings.reduce((acc, booking) => {
+    const key = booking.status || "UNKNOWN";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  const summary = [
+    { label: "Booked", value: counts.BOOKED || 0, accent: "var(--signal-teal)" },
+    { label: "Loaded", value: counts.LOADED || 0, accent: "var(--ore-copper)" },
+    { label: "In Transit", value: counts.IN_TRANSIT || 0, accent: "var(--signal-teal)" },
+    { label: "Offloaded", value: counts.OFFLOADED || 0, accent: "var(--signal-teal)" },
+    { label: "Expired", value: counts.EXPIRED || 0, accent: "var(--alert-red)" },
+    { label: "Cancelled", value: counts.CANCELLED || 0, accent: "var(--text-faint)" },
+  ];
+  return `
+    <div class="kpi-grid compact">
+      ${summary.map(item => `
+        <div class="kpi-card" style="--accent:${item.accent}">
+          <div class="kpi-label">${item.label}</div>
+          <div class="kpi-value">${item.value}</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function bookingCard(booking, clientMap, transporterMap, canCancel = false) {
+  const client = clientMap.get(String(booking.client_id));
+  const transporter = transporterMap.get(String(booking.transporter_id));
+  const canCancelAction = canCancel && ["BOOKED", "EXPIRED"].includes(booking.status);
+  return `
+    <article class="record-card">
+      <div class="record-card-head">
+        <div>
+          <div class="record-title mono">${escapeHtml(booking.horse_registration)}</div>
+          <div class="record-sub">${escapeHtml(booking.driver_name)} · ${escapeHtml(booking.origin || "No origin set")}</div>
+        </div>
+        <div class="record-badges">
+          ${pill(booking.status)}
+          ${pill(booking.payment_status)}
+        </div>
+      </div>
+      <div class="record-meta-grid">
+        <div><span>Client</span><strong>${escapeHtml(client?.name || `Client #${booking.client_id}`)}</strong></div>
+        <div><span>Transporter</span><strong>${escapeHtml(transporter?.name || `Transporter #${booking.transporter_id}`)}</strong></div>
+        <div><span>Booked</span><strong class="mono">${fmtDate(booking.booking_date)}</strong></div>
+        <div><span>ETA</span><strong class="mono">${fmtDate(booking.eta)}</strong></div>
+      </div>
+      <div class="record-track-wrap">${routeTrack(booking.status)}</div>
+      <div class="record-footer">
+        <div class="record-kpis">
+          <span>Loaded ${fmtTonnes(booking.loaded_tonnage)}</span>
+          <span>Deposit ${fmtMoney(booking.deposit_amount)}</span>
+          <span>Balance ${fmtMoney(booking.balance_amount)}</span>
+          ${booking.gross_broker_margin != null ? `<span>Margin ${fmtMoney(booking.gross_broker_margin)}</span>` : ""}
+        </div>
+        ${canCancelAction ? `<button class="btn btn-sm btn-danger" data-booking-cancel data-booking-id="${booking.id}">Cancel booking</button>` : ""}
+      </div>
+    </article>
+  `;
+}
+
+function workflowEmpty(title, guidance) {
+  return `
+    <div class="empty-state empty-state-guide">
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(guidance)}</span>
+    </div>
+  `;
+}
+
 // clock
 setInterval(() => {
   const el = document.getElementById("clock");
@@ -303,17 +407,22 @@ async function renderBookings(container) {
   const [bookings, clients, transporters] = await Promise.all([
     api("/bookings"), canCreate ? getClients() : [], canCreate ? getTransporters() : [],
   ]);
+  const { clientMap, transporterMap } = bookingLookupMaps(bookings, clients, transporters);
+  const orderedBookings = [...bookings].sort((left, right) => new Date(right.booking_date) - new Date(left.booking_date));
+  const activeCount = bookings.filter(booking => ["BOOKED", "LOADED", "IN_TRANSIT"].includes(booking.status)).length;
+  const cancellableCount = bookings.filter(booking => ["BOOKED", "EXPIRED"].includes(booking.status)).length;
 
   container.innerHTML = `
+    ${bookingSummaryCards(bookings)}
     ${canCreate ? `
     <div class="panel">
       <div class="panel-head"><h3>New Booking</h3><span class="panel-sub">Source a truck against a client/transporter pair</span></div>
       <form id="booking-form" class="form-grid">
-        <label class="field-label">Horse Registration<input class="field-input" name="horse_registration" required></label>
-        <label class="field-label">Trailer 1 Reg<input class="field-input" name="trailer1_registration"></label>
-        <label class="field-label">Trailer 2 Reg<input class="field-input" name="trailer2_registration"></label>
-        <label class="field-label">Driver Name<input class="field-input" name="driver_name" required></label>
-        <label class="field-label">Passport No<input class="field-input" name="passport_number"></label>
+        <label class="field-label">Horse Registration<input class="field-input" name="horse_registration" required placeholder="AFH1234"></label>
+        <label class="field-label">Trailer 1 Reg<input class="field-input" name="trailer1_registration" placeholder="AFH1234T1"></label>
+        <label class="field-label">Trailer 2 Reg<input class="field-input" name="trailer2_registration" placeholder="AFH1234T2"></label>
+        <label class="field-label">Driver Name<input class="field-input" name="driver_name" required placeholder="Tendai Moyo"></label>
+        <label class="field-label">Passport No<input class="field-input" name="passport_number" placeholder="ZW1234567"></label>
         <label class="field-label">Origin
           <select class="field-input" name="origin">
             ${["Lalapanzi", "Mapanzure", "NETA", "Mberegwa", "Shurugwi", "Zvishavane"].map(o => `<option>${o}</option>`).join("")}
@@ -322,11 +431,13 @@ async function renderBookings(container) {
         <label class="field-label">ETA<input class="field-input" type="datetime-local" name="eta"></label>
         <label class="field-label">Client
           <select class="field-input" name="client_id" required>
+            <option value="">Select client</option>
             ${clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)} ($${c.default_client_rate}/t)</option>`).join("")}
           </select>
         </label>
         <label class="field-label">Transporter
           <select class="field-input" name="transporter_id" required>
+            <option value="">Select transporter</option>
             ${transporters.map(t => `<option value="${t.id}">${escapeHtml(t.name)} ($${t.default_transporter_rate}/t)</option>`).join("")}
           </select>
         </label>
@@ -337,26 +448,12 @@ async function renderBookings(container) {
     </div>` : ""}
 
     <div class="panel">
-      <div class="panel-head"><h3>All Bookings</h3><span class="panel-sub">${bookings.length} total</span></div>
-      ${bookings.length ? bookings.map(b => `
-        <div style="padding:14px 0;border-bottom:1px solid var(--hairline)">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-            <div>
-              <strong class="mono">${escapeHtml(b.horse_registration)}</strong>
-              &nbsp;·&nbsp; ${escapeHtml(b.driver_name)} &nbsp;·&nbsp; <span style="color:var(--text-faint)">${escapeHtml(b.origin || "—")}</span>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center">
-              ${b.gross_broker_margin != null ? `<span class="mono" style="color:var(--ore-copper);font-size:12px">margin ${fmtMoney(b.gross_broker_margin)}</span>` : ""}
-              ${pill(b.status)}
-              ${pill(b.payment_status)}
-            </div>
-          </div>
-          ${routeTrack(b.status)}
-          <div style="margin-top:8px;font-size:11.5px;color:var(--text-faint)">
-            Loaded ${fmtTonnes(b.loaded_tonnage)} · Deposit ${fmtMoney(b.deposit_amount)} · Balance ${fmtMoney(b.balance_amount)} · Booked ${fmtDate(b.booking_date)}
-          </div>
+      <div class="panel-head"><h3>All Bookings</h3><span class="panel-sub">${bookings.length} total · ${activeCount} active · ${cancellableCount} cancellable</span></div>
+      ${orderedBookings.length ? `
+        <div class="record-stack">
+          ${orderedBookings.map(booking => bookingCard(booking, clientMap, transporterMap, canCreate)).join("")}
         </div>
-      `).join("") : `<div class="empty-state">No bookings yet — create one above.</div>`}
+      ` : workflowEmpty("No bookings yet", "Create the first dispatch using the booking form above. Real demo clients and transporters appear in the dropdowns once seeded.")}
     </div>
   `;
 
@@ -364,34 +461,82 @@ async function renderBookings(container) {
   if (form) {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (!form.reportValidity()) {
+        setFormMessage(form, "Complete the required booking fields.", "error");
+        return;
+      }
       const fd = new FormData(form);
       const payload = Object.fromEntries(fd.entries());
       payload.client_id = Number(payload.client_id);
       payload.transporter_id = Number(payload.transporter_id);
       if (!payload.eta) delete payload.eta; else payload.eta = new Date(payload.eta).toISOString();
       try {
+        clearFormMessage(form);
         await api("/bookings", { method: "POST", body: payload });
+        setFormMessage(form, "Booking created successfully.");
         toast("Booking created.");
         navigate("bookings");
-      } catch (err) { toast(err.message, true); }
+      } catch (err) {
+        setFormMessage(form, err.message, "error");
+        toast(err.message, true);
+      }
     });
   }
+
+  container.querySelectorAll("[data-booking-cancel]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const bookingId = btn.dataset.bookingId;
+      if (!window.confirm("Cancel this booking?")) return;
+      btn.disabled = true;
+      try {
+        await api(`/bookings/${bookingId}/cancel`, { method: "POST" });
+        toast("Booking cancelled.");
+        navigate("bookings");
+      } catch (err) {
+        btn.disabled = false;
+        toast(err.message, true);
+      }
+    });
+  });
 }
 
 // =================================================================
 // LOADING (weighbridge capture)
 // =================================================================
 async function renderLoading(container) {
-  const bookings = (await api("/bookings")).filter(b => b.status === "BOOKED");
+  const bookings = await api("/bookings");
+  const awaiting = bookings.filter(booking => booking.status === "BOOKED");
+  const completed = bookings.filter(booking => booking.loaded_tonnage != null);
+  const loadRecords = await Promise.all(completed.map(async booking => {
+    try {
+      return { booking, slip: await api(`/loading-slips/${booking.id}`) };
+    } catch (err) {
+      return { booking, slip: null };
+    }
+  }));
 
   container.innerHTML = `
+    <div class="kpi-grid compact">
+      <div class="kpi-card" style="--accent:var(--ore-copper)">
+        <div class="kpi-label">Awaiting Weighbridge</div>
+        <div class="kpi-value">${awaiting.length}</div>
+      </div>
+      <div class="kpi-card" style="--accent:var(--signal-teal)">
+        <div class="kpi-label">Captured Loads</div>
+        <div class="kpi-value">${loadRecords.length}</div>
+      </div>
+      <div class="kpi-card" style="--accent:var(--signal-teal)">
+        <div class="kpi-label">Total Loaded Tonnes</div>
+        <div class="kpi-value">${fmtTonnes(loadRecords.reduce((sum, item) => sum + (item.booking.loaded_tonnage || 0), 0))}</div>
+      </div>
+    </div>
     <div class="panel">
       <div class="panel-head"><h3>Capture Loading Slip</h3><span class="panel-sub">Weighbridge ticket — transitions booking to LOADED</span></div>
-      ${bookings.length ? `
+      ${awaiting.length ? `
       <form id="loading-form" class="form-grid">
         <label class="field-label">Booking
           <select class="field-input" name="booking_id" required>
-            ${bookings.map(b => `<option value="${b.id}">${escapeHtml(b.horse_registration)} — ${escapeHtml(b.driver_name)} (${escapeHtml(b.origin || "")})</option>`).join("")}
+            ${awaiting.map(b => `<option value="${b.id}">${escapeHtml(b.horse_registration)} — ${escapeHtml(b.driver_name)} (${escapeHtml(b.origin || "")})</option>`).join("")}
           </select>
         </label>
         <label class="field-label">Ticket No<input class="field-input" name="ticket_no" required placeholder="WB-0001"></label>
@@ -406,22 +551,67 @@ async function renderLoading(container) {
         </div>
       </form>` : `<div class="empty-state">No bookings currently awaiting loading.</div>`}
     </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Completed Loading Records</h3><span class="panel-sub">${loadRecords.length} slips captured</span></div>
+      ${loadRecords.length ? `
+        <div class="record-stack">
+          ${loadRecords.map(({ booking, slip }) => `
+            <article class="record-card">
+              <div class="record-card-head">
+                <div>
+                  <div class="record-title mono">${escapeHtml(booking.horse_registration)}</div>
+                  <div class="record-sub">${escapeHtml(booking.driver_name)} · ticket ${escapeHtml(slip?.ticket_no || "Pending")}</div>
+                </div>
+                <div class="record-badges">${pill(booking.status)}</div>
+              </div>
+              <div class="record-meta-grid">
+                <div><span>Loaded mass</span><strong>${fmtTonnes(booking.loaded_tonnage)}</strong></div>
+                <div><span>Tare</span><strong>${slip ? fmtTonnes(slip.tare_mass) : "—"}</strong></div>
+                <div><span>Gross</span><strong>${slip ? fmtTonnes(slip.gross_mass) : "—"}</strong></div>
+                <div><span>Origin</span><strong>${escapeHtml(slip?.location || booking.origin || "—")}</strong></div>
+              </div>
+              <div class="record-footer">
+                <div class="record-kpis">
+                  <span>Deposit ${fmtMoney(booking.deposit_amount)}</span>
+                  <span>Balance ${fmtMoney(booking.balance_amount)}</span>
+                  <span>Booked ${fmtDate(booking.booking_date)}</span>
+                </div>
+              </div>
+            </article>
+          `).join("")}
+        </div>
+      ` : workflowEmpty("No loading slips captured yet", "Use the form above to capture the first weighbridge slip. Once booked trucks are loaded, they move into the tracking and accounts queues.")}
+    </div>
   `;
 
   const form = document.getElementById("loading-form");
   if (form) {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (!form.reportValidity()) {
+        setFormMessage(form, "Complete the required loading fields.", "error");
+        return;
+      }
       const fd = new FormData(form);
       const payload = Object.fromEntries(fd.entries());
       payload.booking_id = Number(payload.booking_id);
       payload.tare_mass = Number(payload.tare_mass);
       payload.gross_mass = Number(payload.gross_mass);
+      if (payload.gross_mass <= payload.tare_mass) {
+        setFormMessage(form, "Gross mass must be greater than tare mass.", "error");
+        return;
+      }
       try {
+        clearFormMessage(form);
         const slip = await api("/loading-slips", { method: "POST", body: payload });
+        setFormMessage(form, `Loading slip ${slip.ticket_no} logged successfully.`);
         toast(`Loading slip logged — net ${slip.net_mass} t.`);
         navigate("loading");
-      } catch (err) { toast(err.message, true); }
+      } catch (err) {
+        setFormMessage(form, err.message, "error");
+        toast(err.message, true);
+      }
     });
   }
 }
@@ -439,8 +629,27 @@ async function renderTracking(container) {
     api("/bookings"), api("/tracking-logs?limit=30"),
   ]);
   const active = bookings.filter(b => ["LOADED", "IN_TRANSIT"].includes(b.status));
+  const latestLogs = new Map();
+  logs.forEach(log => {
+    if (!latestLogs.has(log.booking_id)) latestLogs.set(log.booking_id, log);
+  });
+  const activeCount = active.length;
 
   container.innerHTML = `
+    <div class="kpi-grid compact">
+      <div class="kpi-card" style="--accent:var(--signal-teal)">
+        <div class="kpi-label">Active Trips</div>
+        <div class="kpi-value">${activeCount}</div>
+      </div>
+      <div class="kpi-card" style="--accent:var(--ore-copper)">
+        <div class="kpi-label">Recent Notes</div>
+        <div class="kpi-value">${logs.length}</div>
+      </div>
+      <div class="kpi-card" style="--accent:var(--alert-amber)">
+        <div class="kpi-label">Tracking Flags</div>
+        <div class="kpi-value">${logs.filter(log => log.status_flag).length}</div>
+      </div>
+    </div>
     <div class="panel">
       <div class="panel-head"><h3>Log a Check-in Call</h3><span class="panel-sub">Type the note naturally — status &amp; location are auto-detected</span></div>
       ${active.length ? `
@@ -460,18 +669,54 @@ async function renderTracking(container) {
     </div>
 
     <div class="panel">
-      <div class="panel-head"><h3>Recent Check-ins</h3><span class="panel-sub">${logs.length} logged</span></div>
-      ${logs.length ? logs.map(l => `
-        <div class="tracklog-item">
-          <div class="tracklog-flag">
-            ${l.status_flag ? `<span class="pill" style="background:transparent;border:1px solid ${FLAG_COLORS[l.status_flag] || "var(--hairline)"};color:${FLAG_COLORS[l.status_flag] || "var(--text-muted)"}">${l.status_flag.replace("_", " ")}</span>` : `<span class="pill" style="background:transparent;border:1px solid var(--hairline);color:var(--text-faint)">NOTE</span>`}
-          </div>
-          <div>
-            <div class="tracklog-note">${escapeHtml(l.raw_note)}</div>
-            <div class="tracklog-meta">booking #${l.booking_id}${l.location_guess ? ` · location: ${escapeHtml(l.location_guess)}` : ""} · ${fmtDate(l.logged_at)}</div>
-          </div>
+      <div class="panel-head"><h3>Active Route Board</h3><span class="panel-sub">Latest live locations and statuses</span></div>
+      ${active.length ? `
+        <div class="record-stack">
+          ${active.map(booking => {
+    const latest = latestLogs.get(booking.id);
+    return `
+              <article class="record-card">
+                <div class="record-card-head">
+                  <div>
+                    <div class="record-title mono">${escapeHtml(booking.horse_registration)}</div>
+                    <div class="record-sub">${escapeHtml(booking.driver_name)} · ${escapeHtml(booking.origin || "Unknown origin")}</div>
+                  </div>
+                  <div class="record-badges">
+                    ${pill(booking.status)}
+                    ${booking.tracking_status ? `<span class="pill pill-${booking.tracking_status}">${safeStatus(booking.tracking_status)}</span>` : ""}
+                  </div>
+                </div>
+                <div class="record-meta-grid">
+                  <div><span>Current location</span><strong>${escapeHtml(booking.location_status || booking.origin || "Awaiting update")}</strong></div>
+                  <div><span>Latest note</span><strong>${escapeHtml(latest?.raw_note || "No tracking note yet")}</strong></div>
+                  <div><span>Last update</span><strong class="mono">${fmtDate(booking.tracking_timestamp || latest?.logged_at)}</strong></div>
+                  <div><span>Route stage</span><strong>${escapeHtml(booking.tracking_status || "Untracked")}</strong></div>
+                </div>
+                ${routeTrack(booking.status)}
+              </article>
+            `;
+  }).join("")}
         </div>
-      `).join("") : `<div class="empty-state">No check-ins logged yet.</div>`}
+      ` : workflowEmpty("No active trucks to track", "Once a truck is loaded or in transit, it appears here with the latest location and note history.")}
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Recent Check-ins</h3><span class="panel-sub">${logs.length} logged</span></div>
+      ${logs.length ? `
+        <div class="record-stack">
+          ${logs.map(l => `
+            <article class="tracklog-item">
+              <div class="tracklog-flag">
+                ${l.status_flag ? `<span class="pill" style="background:transparent;border:1px solid ${FLAG_COLORS[l.status_flag] || "var(--hairline)"};color:${FLAG_COLORS[l.status_flag] || "var(--text-muted)"}">${safeStatus(l.status_flag)}</span>` : `<span class="pill" style="background:transparent;border:1px solid var(--hairline);color:var(--text-faint)">NOTE</span>`}
+              </div>
+              <div class="tracklog-body">
+                <div class="tracklog-note">${escapeHtml(l.raw_note)}</div>
+                <div class="tracklog-meta">booking #${l.booking_id}${l.location_guess ? ` · location: ${escapeHtml(l.location_guess)}` : ""} · ${fmtDate(l.logged_at)}</div>
+              </div>
+            </article>
+          `).join("")}
+        </div>
+      ` : `<div class="empty-state">No check-ins logged yet.</div>`}
     </div>
   `;
 
@@ -479,14 +724,23 @@ async function renderTracking(container) {
   if (form) {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (!form.reportValidity()) {
+        setFormMessage(form, "Enter a tracking note before submitting.", "error");
+        return;
+      }
       const fd = new FormData(form);
       const payload = Object.fromEntries(fd.entries());
       payload.booking_id = Number(payload.booking_id);
       try {
+        clearFormMessage(form);
         const log = await api("/tracking-logs", { method: "POST", body: payload });
+        setFormMessage(form, `Tracking note logged${log.status_flag ? ` and flagged ${log.status_flag}` : ""}.`);
         toast(`Logged${log.status_flag ? ` — flagged ${log.status_flag}` : ""}.`);
         navigate("tracking");
-      } catch (err) { toast(err.message, true); }
+      } catch (err) {
+        setFormMessage(form, err.message, "error");
+        toast(err.message, true);
+      }
     });
   }
 }
@@ -495,16 +749,46 @@ async function renderTracking(container) {
 // OFFLOADING (terminal capture, shrinkage)
 // =================================================================
 async function renderOffloading(container) {
-  const bookings = (await api("/bookings")).filter(b => ["LOADED", "IN_TRANSIT"].includes(b.status));
+  const bookings = await api("/bookings");
+  const active = bookings.filter(b => ["LOADED", "IN_TRANSIT"].includes(b.status));
+  const completed = bookings.filter(b => b.status === "OFFLOADED");
+  const { bookingMap } = bookingLookupMaps(bookings, [], []);
+  const offloadRecords = await Promise.all(completed.map(async booking => {
+    try {
+      return { booking, offload: await api(`/offloading/${booking.id}`) };
+    } catch (err) {
+      return { booking, offload: null };
+    }
+  }));
+  const totalShrinkage = offloadRecords.reduce((sum, item) => sum + (item.offload?.shrinkage_tonnes || 0), 0);
+  const totalRecovery = offloadRecords.reduce((sum, item) => sum + (item.offload?.penalty_margin_recovery || 0), 0);
 
   container.innerHTML = `
+    <div class="kpi-grid compact">
+      <div class="kpi-card" style="--accent:var(--signal-teal)">
+        <div class="kpi-label">Awaiting Offload</div>
+        <div class="kpi-value">${active.length}</div>
+      </div>
+      <div class="kpi-card" style="--accent:var(--ore-copper)">
+        <div class="kpi-label">Completed Offloads</div>
+        <div class="kpi-value">${offloadRecords.length}</div>
+      </div>
+      <div class="kpi-card" style="--accent:var(--alert-amber)">
+        <div class="kpi-label">Total Shrinkage</div>
+        <div class="kpi-value">${fmtTonnes(totalShrinkage)}</div>
+      </div>
+      <div class="kpi-card" style="--accent:var(--signal-teal)">
+        <div class="kpi-label">Penalty Recovery</div>
+        <div class="kpi-value">${fmtMoney(totalRecovery)}</div>
+      </div>
+    </div>
     <div class="panel">
       <div class="panel-head"><h3>Capture Offloading Slip</h3><span class="panel-sub">Terminal weighbridge — computes shrinkage &amp; split penalty automatically</span></div>
-      ${bookings.length ? `
+      ${active.length ? `
       <form id="offload-form" class="form-grid">
         <label class="field-label">Booking
           <select class="field-input" name="booking_id" required>
-            ${bookings.map(b => `<option value="${b.id}">${escapeHtml(b.horse_registration)} — loaded ${fmtTonnes(b.loaded_tonnage)}</option>`).join("")}
+            ${active.map(b => `<option value="${b.id}">${escapeHtml(b.horse_registration)} — loaded ${fmtTonnes(b.loaded_tonnage)}</option>`).join("")}
           </select>
         </label>
         <label class="field-label">Destination
@@ -515,10 +799,45 @@ async function renderOffloading(container) {
         <label class="field-label">Transaction No<input class="field-input" name="transaction_no"></label>
         <label class="field-label">Pre-Advice No<input class="field-input" name="pre_advice_no"></label>
         <label class="field-label">Nett Weight Received (t)<input class="field-input" type="number" step="0.01" name="nett_weight_received" required></label>
+        <label class="field-label">First Weight<input class="field-input" type="number" step="0.01" name="first_weight"></label>
+        <label class="field-label">Second Weight<input class="field-input" type="number" step="0.01" name="second_weight"></label>
+        <label class="field-label">Tare Weight<input class="field-input" type="number" step="0.01" name="tare_weight"></label>
         <div class="form-actions" style="grid-column:1/-1">
           <button class="btn btn-primary" type="submit">Log Offloading</button>
         </div>
       </form>` : `<div class="empty-state">No trucks currently awaiting offloading capture.</div>`}
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>Completed Offload Records</h3><span class="panel-sub">${offloadRecords.length} completed receipts</span></div>
+      ${offloadRecords.length ? `
+        <div class="record-stack">
+          ${offloadRecords.map(({ booking, offload }) => `
+            <article class="record-card">
+              <div class="record-card-head">
+                <div>
+                  <div class="record-title mono">${escapeHtml(booking.horse_registration)}</div>
+                  <div class="record-sub">${escapeHtml(offload?.destination || "Unknown destination")} · transaction ${escapeHtml(offload?.transaction_no || "Pending")}</div>
+                </div>
+                <div class="record-badges">${pill(booking.status)}</div>
+              </div>
+              <div class="record-meta-grid">
+                <div><span>Received</span><strong>${fmtTonnes(offload?.nett_weight_received)}</strong></div>
+                <div><span>Shrinkage</span><strong>${fmtTonnes(offload?.shrinkage_tonnes)}</strong></div>
+                <div><span>Client charge</span><strong>${fmtMoney(offload?.client_penalty_charge)}</strong></div>
+                <div><span>Transporter charge</span><strong>${fmtMoney(offload?.transporter_penalty_charge)}</strong></div>
+              </div>
+              <div class="record-footer">
+                <div class="record-kpis">
+                  <span>Recovery ${fmtMoney(offload?.penalty_margin_recovery)}</span>
+                  <span>Deposit ${fmtMoney(booking.deposit_amount)}</span>
+                  <span>Balance ${fmtMoney(booking.balance_amount)}</span>
+                </div>
+              </div>
+            </article>
+          `).join("")}
+        </div>
+      ` : workflowEmpty("No offloading records captured yet", "Capture a terminal slip after loading so the destination, shrinkage, and financial outcomes are recorded here.")}
     </div>
   `;
 
@@ -526,17 +845,41 @@ async function renderOffloading(container) {
   if (form) {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (!form.reportValidity()) {
+        setFormMessage(form, "Complete the required offloading fields.", "error");
+        return;
+      }
       const fd = new FormData(form);
       const payload = Object.fromEntries(fd.entries());
       payload.booking_id = Number(payload.booking_id);
       payload.nett_weight_received = Number(payload.nett_weight_received);
+      ["first_weight", "second_weight", "tare_weight"].forEach(field => {
+        if (payload[field] === "" || payload[field] == null) {
+          delete payload[field];
+        } else {
+          payload[field] = Number(payload[field]);
+        }
+      });
+      const booking = bookingMap.get(String(payload.booking_id));
+      if (booking) {
+        payload.driver_name = booking.driver_name;
+        payload.transporter_name = booking.transporter_name || undefined;
+        payload.horse_registration = booking.horse_registration;
+        payload.trailer1 = booking.trailer1_registration || undefined;
+        payload.trailer2 = booking.trailer2_registration || undefined;
+      }
       try {
+        clearFormMessage(form);
         const off = await api("/offloading", { method: "POST", body: payload });
+        setFormMessage(form, `Offloading captured at ${off.destination || "the terminal"}.`);
         toast(off.shrinkage_tonnes > 0
           ? `Captured — shrinkage ${off.shrinkage_tonnes} t detected.`
           : "Captured — no shrinkage.");
         navigate("offloading");
-      } catch (err) { toast(err.message, true); }
+      } catch (err) {
+        setFormMessage(form, err.message, "error");
+        toast(err.message, true);
+      }
     });
   }
 }
