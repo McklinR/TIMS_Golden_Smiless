@@ -23,6 +23,12 @@ class UserCreate(BaseModel):
     role: UserRole
 
 
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    role: Optional[UserRole] = None
+    is_active: Optional[bool] = None
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str

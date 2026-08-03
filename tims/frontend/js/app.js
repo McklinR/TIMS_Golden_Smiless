@@ -3,7 +3,42 @@
    No build step: open via the FastAPI-served index, or any static
    server, as long as API_BASE points at the backend.
    ============================================================ */
-const API_BASE = ""; // same-origin (FastAPI serves this frontend)
+let API_BASE = "";
+let apiBaseResolved = false;
+
+async function resolveApiBase() {
+  if (apiBaseResolved) return API_BASE;
+
+  const candidates = [];
+  if (typeof window !== "undefined" && window.location) {
+    if (window.location.origin) candidates.push(window.location.origin);
+    if (window.location.protocol) {
+      candidates.push(`${window.location.protocol}//127.0.0.1:8000`);
+      candidates.push(`${window.location.protocol}//localhost:8000`);
+      candidates.push(`${window.location.protocol}//127.0.0.1:8080`);
+      candidates.push(`${window.location.protocol}//localhost:8080`);
+    }
+  }
+  candidates.push("http://127.0.0.1:8000", "http://localhost:8000", "http://127.0.0.1:8080", "http://localhost:8080");
+
+  const uniqueCandidates = [...new Set(candidates.filter(Boolean))];
+  for (const base of uniqueCandidates) {
+    try {
+      const res = await fetch(`${base}/api/health`, { method: "GET", cache: "no-store" });
+      if (res.ok) {
+        API_BASE = base;
+        apiBaseResolved = true;
+        return API_BASE;
+      }
+    } catch (e) {
+      // try the next candidate
+    }
+  }
+
+  API_BASE = window.location.origin || "";
+  apiBaseResolved = true;
+  return API_BASE;
+}
 
 const state = {
   token: localStorage.getItem("tims_token") || null,
@@ -18,6 +53,7 @@ const state = {
 // API helper
 // ---------------------------------------------------------------
 async function api(path, { method = "GET", body, form } = {}) {
+  const base = await resolveApiBase();
   const headers = {};
   if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
   let payload;
@@ -28,7 +64,13 @@ async function api(path, { method = "GET", body, form } = {}) {
     headers["Content-Type"] = "application/json";
     payload = JSON.stringify(body);
   }
-  const res = await fetch(`${API_BASE}${path}`, { method, headers, body: payload });
+  let res;
+  try {
+    res = await fetch(`${base}${path}`, { method, headers, body: payload });
+  } catch (err) {
+    console.error("API request failed", { path, err });
+    throw new Error("Could not reach the server. Please make sure the backend is running locally and refresh the page.");
+  }
   if (res.status === 401) {
     logout();
     throw new Error("Session expired - please sign in again.");
@@ -62,48 +104,47 @@ function logout() {
   document.getElementById("login-screen").classList.remove("hidden");
 }
 
-// =================================================================
-// 🚨 FRONTEND PITCH SHORTCUT - BYPASSES THE SERVER COMPLETELY
-// =================================================================
 async function login(username, password) {
-  // Exact user profiles required for your pitch setup
-  const pitchUsers = {
-    "director": { role: "ADMIN", name: "Company Director", pass: "director123" },
-    "erick": { role: "ADMIN", name: "Erick Logistics", pass: "erick123" },
-    "lyn": { role: "TRACKING", name: "Lyn Operations", pass: "lyn123" },
-    "precious": { role: "BOOKING", name: "Precious Smiles", pass: "password123" },
-    "connie": { role: "ACCOUNTS", name: "Connie Finance", pass: "connie123" }
-  };
+  const errorEl = document.getElementById("login-error");
+  const submitBtn = document.querySelector("#login-form button[type='submit']");
+  errorEl.textContent = "";
+  if (submitBtn) submitBtn.disabled = true;
 
-  const cleanUser = username.toLowerCase().trim();
-  const user = pitchUsers[cleanUser];
-
-  // If the credentials match our pitch profiles, log them in instantly in the browser
-  if (user && user.pass === password) {
-    state.token = "pitch_bypass_token_success";
-    state.role = user.role;
-    state.fullName = user.name;
-
+  try {
+    const data = await api("/api/auth/login", { method: "POST", form: { username, password } });
+    state.token = data.access_token;
+    state.role = data.role;
+    state.fullName = data.full_name;
     localStorage.setItem("tims_token", state.token);
     localStorage.setItem("tims_role", state.role);
     localStorage.setItem("tims_name", state.fullName);
-    return; // Stop here and skip the broken backend database entirely
+    return;
+  } catch (err) {
+    console.error("Login failed", err);
+    errorEl.textContent = err.message || "Unable to sign in right now.";
+    throw err;
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
-
-  // Fallback to the server only if someone types a non-pitch username
-  const data = await api("/auth/login", { method: "POST", form: { username, password } });
-  state.token = data.access_token;
-  state.role = data.role;
-  state.fullName = data.full_name;
-  localStorage.setItem("tims_token", state.token);
-  localStorage.setItem("tims_role", state.role);
-  localStorage.setItem("tims_name", state.fullName);
 }
-// =================================================================
 
 // ---------------------------------------------------------------
 // Shell / nav
 // ---------------------------------------------------------------
+document.getElementById("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const username = document.getElementById("login-username").value;
+  const password = document.getElementById("login-password").value;
+  const errorEl = document.getElementById("login-error");
+  errorEl.textContent = "Signing in…";
+  try {
+    await login(username, password);
+    enterApp();
+  } catch (err) {
+    // error already shown in the form
+  }
+});
+
 function enterApp() {
   document.getElementById("login-screen").classList.add("hidden");
   document.getElementById("app-shell").classList.remove("hidden");
@@ -126,6 +167,11 @@ document.getElementById("rail-nav").addEventListener("click", (e) => {
   const btn = e.target.closest(".rail-item");
   if (!btn) return;
   navigate(btn.dataset.view);
+});
+
+document.getElementById("logout-btn").addEventListener("click", () => {
+  logout();
+  toast("Signed out successfully.");
 });
 
 const VIEW_TITLES = {
@@ -555,9 +601,67 @@ function accountAction(b) {
 // ADMIN (clients & transporters — confidential rate data)
 // =================================================================
 async function renderAdmin(container) {
-  const [clients, transporters] = await Promise.all([getClients(), getTransporters()]);
+  const [clients, transporters, users] = await Promise.all([getClients(), getTransporters(), api("/users")]);
+
+  const onboardingSuggestions = [
+    { username: "erick", full_name: "Erick Logistics", role: "ADMIN" },
+    { username: "lyn", full_name: "Lyn Operations", role: "TRACKING" },
+    { username: "precious", full_name: "Precious Smiles", role: "BOOKING" },
+    { username: "connie", full_name: "Connie Finance", role: "ACCOUNTS" },
+  ];
 
   container.innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h3>Director onboarding</h3><span class="panel-sub">Add Erick, Lyn, and other team members</span></div>
+      <div class="form-grid" style="margin-bottom:16px">
+        ${onboardingSuggestions.map(s => `
+          <div class="panel" style="padding:12px;display:flex;justify-content:space-between;align-items:center;gap:12px">
+            <div>
+              <strong>${escapeHtml(s.full_name)}</strong>
+              <div style="color:var(--text-faint);font-size:12px">${escapeHtml(s.username)} • ${s.role}</div>
+            </div>
+            <button class="btn btn-sm btn-secondary" type="button" data-prefill-user='${JSON.stringify(s)}'>Use</button>
+          </div>
+        `).join("")}
+      </div>
+      <div class="panel-head"><h3>Users</h3><span class="panel-sub">Director-managed access</span></div>
+      <table>
+        <thead><tr><th>Username</th><th>Full name</th><th>Role</th><th>Status</th></tr></thead>
+        <tbody>
+          ${users.map(user => `
+            <tr>
+              <td>${escapeHtml(user.username)}</td>
+              <td>${escapeHtml(user.full_name)}</td>
+              <td>
+                <select class="field-input" data-user-role-select data-user-id="${user.id}">
+                  ${["ADMIN", "BOOKING", "TRACKING", "ACCOUNTS"].map(role => `<option value="${role}" ${user.role === role ? "selected" : ""}>${role}</option>`).join("")}
+                </select>
+              </td>
+              <td>
+                <button class="btn btn-sm ${user.is_active ? "btn-secondary" : "btn-teal"}" data-user-toggle data-user-id="${user.id}" data-active="${user.is_active}">
+                  ${user.is_active ? "Deactivate" : "Activate"}
+                </button>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      <form id="user-form" class="form-grid" style="margin-top:16px">
+        <label class="field-label">Username<input class="field-input" name="username" required></label>
+        <label class="field-label">Full Name<input class="field-input" name="full_name" required></label>
+        <label class="field-label">Password<input class="field-input" type="password" name="password" required></label>
+        <label class="field-label">Role
+          <select class="field-input" name="role" required>
+            <option value="ADMIN">ADMIN</option>
+            <option value="BOOKING">BOOKING</option>
+            <option value="TRACKING">TRACKING</option>
+            <option value="ACCOUNTS">ACCOUNTS</option>
+          </select>
+        </label>
+        <div class="form-actions" style="grid-column:1/-1"><button class="btn btn-primary btn-sm" type="submit">Add User</button></div>
+      </form>
+    </div>
+
     <div class="panel">
       <div class="panel-head"><h3>Clients</h3><span class="panel-sub">Confidential — admin only</span></div>
       <table>
@@ -594,6 +698,51 @@ async function renderAdmin(container) {
       </form>
     </div>
   `;
+
+  container.querySelectorAll("[data-prefill-user]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const suggestion = JSON.parse(btn.dataset.prefillUser);
+      const form = document.getElementById("user-form");
+      form.querySelector('input[name="username"]').value = suggestion.username;
+      form.querySelector('input[name="full_name"]').value = suggestion.full_name;
+      form.querySelector('select[name="role"]').value = suggestion.role;
+      form.querySelector('input[name="password"]').focus();
+      toast(`Prefilled ${suggestion.full_name}.`);
+    });
+  });
+
+  document.getElementById("user-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = Object.fromEntries(new FormData(e.target).entries());
+    try {
+      await api("/users", { method: "POST", body: payload });
+      toast("User added.");
+      navigate("admin");
+    } catch (err) { toast(err.message, true); }
+  });
+
+  container.querySelectorAll("[data-user-role-select]").forEach(select => {
+    select.addEventListener("change", async () => {
+      const userId = select.dataset.userId;
+      try {
+        await api(`/users/${userId}`, { method: "PATCH", body: { role: select.value } });
+        toast("User role updated.");
+        navigate("admin");
+      } catch (err) { toast(err.message, true); }
+    });
+  });
+
+  container.querySelectorAll("[data-user-toggle]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const userId = btn.dataset.userId;
+      const nextState = btn.dataset.active === "true" ? false : true;
+      try {
+        await api(`/users/${userId}`, { method: "PATCH", body: { is_active: nextState } });
+        toast(nextState ? "User activated." : "User deactivated.");
+        navigate("admin");
+      } catch (err) { toast(err.message, true); }
+    });
+  });
 
   document.getElementById("client-form").addEventListener("submit", async (e) => {
     e.preventDefault();

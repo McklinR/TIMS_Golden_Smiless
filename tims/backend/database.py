@@ -3,15 +3,51 @@ Database configuration for TIMS (Transport Management System).
 Golden Smiles Freight and Distribution.
 """
 import os
-from sqlalchemy import create_engine
-from sqlalchemy import inspect, text
-from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from pathlib import Path
 
-SQLALCHEMY_DATABASE_URL = os.getenv("TIMS_DATABASE_URL", "sqlite:///./tims_prod.db")
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy.pool import StaticPool
 
+
+def _get_database_url() -> str:
+    db_url = os.getenv("TIMS_DATABASE_URL") or os.getenv("DATABASE_URL")
+    if not db_url:
+        return "sqlite:///./tims.db"
+
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+    return db_url
+
+
+SQLALCHEMY_DATABASE_URL = _get_database_url()
+engine_kwargs = {"pool_pre_ping": True}
 connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args)
+if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    if SQLALCHEMY_DATABASE_URL.startswith("sqlite:///:memory:"):
+        engine_kwargs["poolclass"] = StaticPool
+        engine_kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        engine_kwargs["connect_args"] = connect_args
+else:
+    engine_kwargs["connect_args"] = connect_args
+
+if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    if SQLALCHEMY_DATABASE_URL.startswith("sqlite:///:memory:"):
+        sqlite_path = None
+    else:
+        sqlite_path = SQLALCHEMY_DATABASE_URL.replace("sqlite:///./", "")
+        sqlite_path = sqlite_path.replace("sqlite:///", "")
+        if sqlite_path.startswith("/"):
+            sqlite_path = sqlite_path[1:]
+        if sqlite_path:
+            Path(sqlite_path).parent.mkdir(parents=True, exist_ok=True)
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
@@ -53,45 +89,41 @@ def ensure_booking_tracking_columns() -> None:
 
 
 def seed_demo_accounts() -> None:
-    """Forces fresh demo account population on production servers by cleaning stale table layers."""
+    """Ensure the baseline demo accounts exist without wiping user records added later."""
     db: Session = SessionLocal()
     try:
         inspector = inspect(engine)
-        if "users" in inspector.get_table_names():
-            # FORCE WIPE: Clears any empty or corrupt user cache rows before writing profiles
-            db.execute(text("DELETE FROM users"))
-            db.commit()
-            
-            print("--- Forcing Fresh Demo Account Seeding Event for Golden Smiles ---")
-            
-            from backend.models import User
-            from backend.auth import get_password_hash
-            
-            # Roles updated to match your exact uppercase enum constraint options
-            account_credentials = {
-                "director": ("director123", "Company Director", "ADMIN"),
-                "erick": ("erick123", "Erick Logistics", "ADMIN"),
-                "lyn": ("lyn123", "Lyn Operations", "TRACKING"),
-                "precious": ("password123", "Precious Smiles", "BOOKING"),
-                "connie": ("connie123", "Connie Finance", "ACCOUNTS")
-            }
-            
-            for username, data in account_credentials.items():
-                password, full_name, role_string = data
-                
-                new_profile = User(
-                    username=username,
-                    full_name=full_name,       
-                    hashed_password=get_password_hash(password), 
-                    role=role_string, 
-                    is_active=True
-                )
-                db.add(new_profile)
-                
-            db.commit()
-            print("--- Production System Seeding Event Concluded Successfully! ---")
+        if "users" not in inspector.get_table_names():
+            return
+
+        print("--- Seeding baseline demo accounts ---")
+
+        from backend.auth import get_password_hash
+        from backend.models import User, UserRole
+
+        account_credentials = {
+            "director": ("director123", "Company Director", "ADMIN"),
+            "erick": ("erick123", "Erick Logistics", "ADMIN"),
+            "lyn": ("lyn123", "Lyn Operations", "TRACKING"),
+            "precious": ("password123", "Precious Smiles", "BOOKING"),
+            "connie": ("connie123", "Connie Finance", "ACCOUNTS"),
+        }
+
+        for username, data in account_credentials.items():
+            password, full_name, role_string = data
+            user = db.query(User).filter(User.username == username).first()
+            if user is None:
+                user = User(username=username)
+                db.add(user)
+            user.full_name = full_name
+            user.hashed_password = get_password_hash(password)
+            user.role = UserRole(role_string)
+            user.is_active = True
+
+        db.commit()
+        print("--- Baseline demo accounts seeded successfully ---")
     except Exception as error:
         db.rollback()
-        print(f"[Warning] Production seeding routine bypassed: {error}")
+        print(f"[Warning] Demo account seeding skipped: {error}")
     finally:
         db.close()

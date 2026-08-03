@@ -11,7 +11,14 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.database import get_db
 
-SECRET_KEY = os.getenv("TIMS_SECRET_KEY", "dev-secret-change-me-in-production")
+
+def ensure_database_ready(db: Session) -> None:
+    """Create database tables before auth dependencies read from them."""
+    from backend.database import Base, engine
+
+    Base.metadata.create_all(bind=engine)
+
+SECRET_KEY = os.getenv("TIMS_SECRET_KEY") or os.getenv("SECRET_KEY") or "dev-secret-change-me-in-production"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOHours = 8
 
@@ -61,6 +68,8 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> models.User:
+    ensure_database_ready(db)
+
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise _credentials_exception("Not authenticated")
 

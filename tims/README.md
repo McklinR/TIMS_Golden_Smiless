@@ -8,8 +8,8 @@ A freight brokering platform for multi-vehicle mineral/commodity transport
 ## What's built
 
 - **FastAPI + SQLAlchemy backend** (`backend/`) — bookings, loading slips,
-  offloading, tracking, accounts, role-based auth, all wired to a SQLite
-  database (`tims.db`, created automatically).
+  offloading, tracking, accounts, role-based auth, all wired to a database
+  selected by `DATABASE_URL` or `TIMS_DATABASE_URL` (Postgres on Railway, SQLite locally).
 - **Vanilla JS + HTML/CSS frontend** (`frontend/`) — dark, dense operational
   dashboard, no build step required. Served directly by FastAPI at `/`.
 - **Business logic implemented exactly per spec:**
@@ -41,22 +41,30 @@ pip install -r requirements.txt
 python -m backend.seed
 
 # run the server (serves both the API and the dashboard UI)
-uvicorn backend.main:app --reload
+# Windows users should use the launcher below to avoid port-binding issues
+python start_server.py
 ```
 
-Then open **http://127.0.0.1:8000** in your browser.
+## Railway deployment
 
-Interactive API docs (Swagger UI) are at **http://127.0.0.1:8000/docs**.
+- Set the service root to the repository root.
+- Start command: `python -m uvicorn backend.main:app --host 0.0.0.0 --port $PORT` from the `tims` directory.
+- Add PostgreSQL and set `DATABASE_URL` or `TIMS_DATABASE_URL`.
+- Set `TIMS_SECRET_KEY` to a strong random value.
 
-### Demo logins (seeded)
+### Demo logins
 
-| Username  | Password    | Role     | Represents                    |
-|-----------|-------------|----------|--------------------------------|
-| director  | admin123    | ADMIN    | Director — full visibility     |
-| erick     | erick123    | BOOKING  | Erick — booking & loading      |
-| lyn       | lyn123      | TRACKING | Lyn — route tracking           |
-| precious  | precious123 | TRACKING | Precious — route tracking      |
-| connie    | connie123   | ACCOUNTS | Connie — invoicing & payables  |
+| Username | Password | Role |
+|----------|----------|------|
+| director | director123 | ADMIN |
+| erick | erick123 | ADMIN |
+| lyn | lyn123 | TRACKING |
+| precious | password123 | BOOKING |
+| connie | connie123 | ACCOUNTS |
+
+Then open **http://127.0.0.1:8002** in your browser.
+
+Interactive API docs (Swagger UI) are at **http://127.0.0.1:8002/docs**.
 
 ## Project layout
 

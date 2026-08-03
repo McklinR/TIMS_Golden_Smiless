@@ -54,11 +54,11 @@ def _upsert_booking(db, booking: models.Booking):
 def seed():
     db = SessionLocal()
     try:
-        erick = _upsert_user(db, "erick", "Erick - Booking & Loading", "erick123", models.UserRole.BOOKING)
-        _upsert_user(db, "admin", "Director (Admin)", "admin123", models.UserRole.ADMIN)
-        _upsert_user(db, "lyn", "Lyn - Tracking & Route Ops", "lyn123", models.UserRole.TRACKING)
-        _upsert_user(db, "precious", "Precious - Tracking & Route Ops", "precious123", models.UserRole.TRACKING)
-        _upsert_user(db, "connie", "Connie - Invoicing & Accounts", "connie123", models.UserRole.ACCOUNTS)
+        erick = _upsert_user(db, "erick", "Erick Logistics", "erick123", models.UserRole.ADMIN)
+        _upsert_user(db, "director", "Company Director", "director123", models.UserRole.ADMIN)
+        _upsert_user(db, "lyn", "Lyn Operations", "lyn123", models.UserRole.TRACKING)
+        _upsert_user(db, "precious", "Precious Smiles", "password123", models.UserRole.BOOKING)
+        _upsert_user(db, "connie", "Connie Finance", "connie123", models.UserRole.ACCOUNTS)
         db.commit()
 
         icebay = db.query(models.Client).filter(models.Client.name == "Icebay").first()
@@ -143,10 +143,10 @@ def seed():
 
         print("Seed complete.")
         print("Login users:")
-        print("  admin    / admin123      (ADMIN - full financial visibility)")
-        print("  erick    / erick123      (BOOKING)")
+        print("  director / director123   (ADMIN)")
+        print("  erick    / erick123      (ADMIN)")
         print("  lyn      / lyn123        (TRACKING)")
-        print("  precious / precious123   (TRACKING)")
+        print("  precious / password123   (BOOKING)")
         print("  connie   / connie123     (ACCOUNTS)")
     finally:
         db.close()
