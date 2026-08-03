@@ -14,13 +14,18 @@ from fastapi.staticfiles import StaticFiles
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import os
+
     from backend.database import Base, engine, ensure_booking_tracking_columns, seed_demo_accounts
-    from backend.seed import seed as seed_demo_records
 
     Base.metadata.create_all(bind=engine)
     ensure_booking_tracking_columns()
     seed_demo_accounts()
-    seed_demo_records()
+
+    if os.getenv("TIMS_SEED_DEMO_DATA", "0") == "1":
+        from backend.seed import seed as seed_demo_records
+
+        seed_demo_records()
     yield
 
 
