@@ -18,6 +18,19 @@ from backend import schemas, models, auth
 from backend.database import get_db
 from backend.models import UserRole, BookingStatus
 
+
+def _get_client_rate(client: models.Client, booking_date: datetime | None = None) -> tuple[float, float]:
+    history = list(client.rate_history or [])
+    if not history:
+        return client.default_client_rate or 0.0, client.default_penalty_rate or 0.0
+
+    if booking_date is None:
+        booking_date = datetime.utcnow()
+
+    applicable = [item for item in history if item.effective_from <= booking_date]
+    selected = applicable[-1] if applicable else history[0]
+    return selected.client_rate or 0.0, selected.penalty_rate or 0.0
+
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
 
@@ -61,9 +74,9 @@ def create_booking(payload: schemas.BookingCreate, db: Session = Depends(get_db)
         origin=payload.origin,
         client_id=payload.client_id,
         transporter_id=payload.transporter_id,
-        client_rate=payload.client_rate if payload.client_rate is not None else client.default_client_rate,
+        client_rate=payload.client_rate if payload.client_rate is not None else _get_client_rate(client, payload.eta or datetime.utcnow())[0],
         transporter_rate=payload.transporter_rate if payload.transporter_rate is not None else transporter.default_transporter_rate,
-        client_penalty_rate=payload.client_penalty_rate if payload.client_penalty_rate is not None else client.default_penalty_rate,
+        client_penalty_rate=payload.client_penalty_rate if payload.client_penalty_rate is not None else _get_client_rate(client, payload.eta or datetime.utcnow())[1],
         transporter_penalty_rate=payload.transporter_penalty_rate if payload.transporter_penalty_rate is not None else transporter.default_penalty_rate,
         status=BookingStatus.BOOKED,
         booking_date=datetime.utcnow(),

@@ -164,6 +164,32 @@ def _upsert_tracking_log(db, booking_id: int, raw_note: str, logged_by: int, sta
     return log
 
 
+def _upsert_client_rate_history(db, client_id: int, client_rate: float, penalty_rate: float, effective_from, notes: str | None = None):
+    existing = (
+        db.query(models.ClientRateHistory)
+        .filter(
+            models.ClientRateHistory.client_id == client_id,
+            models.ClientRateHistory.effective_from == effective_from,
+        )
+        .first()
+    )
+    if existing is None:
+        db.add(
+            models.ClientRateHistory(
+                client_id=client_id,
+                client_rate=client_rate,
+                penalty_rate=penalty_rate,
+                effective_from=effective_from,
+                notes=notes,
+            )
+        )
+        return
+
+    existing.client_rate = client_rate
+    existing.penalty_rate = penalty_rate
+    existing.notes = notes
+
+
 def seed():
     db = SessionLocal()
     try:
@@ -173,7 +199,7 @@ def seed():
         _upsert_user(db, "director", "Company Director", "director123", models.UserRole.ADMIN)
         _upsert_user(db, "lyn", "Lyn Operations", "lyn123", models.UserRole.TRACKING)
         _upsert_user(db, "precious", "Precious Smiles", "password123", models.UserRole.BOOKING)
-        _upsert_user(db, "connie", "Connie Finance", "connie123", models.UserRole.ACCOUNTS)
+        _upsert_user(db, "edina", "Edina Finance", "edina123", models.UserRole.ACCOUNTS)
         db.commit()
 
         icebay = _upsert_client(
@@ -229,7 +255,37 @@ def seed():
             default_transporter_rate=34.0,
             default_penalty_rate=240.0,
         )
+        delta = _upsert_transporter(
+            db,
+            name="Delta Freight",
+            contact_name="R. Sithole",
+            contact_phone="+263 77 000 1004",
+            default_transporter_rate=37.0,
+            default_penalty_rate=255.0,
+        )
+        kappa = _upsert_transporter(
+            db,
+            name="Kappa Haulers",
+            contact_name="T. Ncube",
+            contact_phone="+263 77 000 1005",
+            default_transporter_rate=33.5,
+            default_penalty_rate=245.0,
+        )
+        atlas = _upsert_transporter(
+            db,
+            name="Atlas Logistics",
+            contact_name="M. Dube",
+            contact_phone="+263 77 000 1006",
+            default_transporter_rate=38.25,
+            default_penalty_rate=260.0,
+        )
         db.commit()
+
+        _upsert_client_rate_history(db, icebay.id, 44.0, 195.0, now - timedelta(days=60), "Old contract rate")
+        _upsert_client_rate_history(db, icebay.id, 45.0, 200.0, now - timedelta(days=20), "Current rate")
+        _upsert_client_rate_history(db, eastlook.id, 47.0, 200.0, now - timedelta(days=45), "Earlier rate")
+        _upsert_client_rate_history(db, eastlook.id, 48.0, 200.0, now - timedelta(days=10), "Updated terminal rate")
+        _upsert_client_rate_history(db, northbridge.id, 46.5, 210.0, now - timedelta(days=15), "Seed demo rate")
 
         _upsert_booking(
             db,
@@ -245,9 +301,9 @@ def seed():
                 status=models.BookingStatus.BOOKED,
                 client_id=icebay.id,
                 transporter_id=mogale.id,
-                client_rate=icebay.default_client_rate,
+                client_rate=45.0,
                 transporter_rate=mogale.default_transporter_rate,
-                client_penalty_rate=icebay.default_penalty_rate,
+                client_penalty_rate=200.0,
                 transporter_penalty_rate=mogale.default_penalty_rate,
                 created_by=erick.id,
             ),
@@ -266,9 +322,9 @@ def seed():
                 status=models.BookingStatus.IN_TRANSIT,
                 client_id=eastlook.id,
                 transporter_id=mogale.id,
-                client_rate=eastlook.default_client_rate,
+                client_rate=48.0,
                 transporter_rate=mogale.default_transporter_rate,
-                client_penalty_rate=eastlook.default_penalty_rate,
+                client_penalty_rate=200.0,
                 transporter_penalty_rate=mogale.default_penalty_rate,
                 created_by=erick.id,
                 loaded_date=now - timedelta(hours=3),
@@ -291,11 +347,11 @@ def seed():
                 origin="Mberengwa",
                 status=models.BookingStatus.OFFLOADED,
                 client_id=northbridge.id,
-                transporter_id=swiftline.id,
+                transporter_id=delta.id,
                 client_rate=northbridge.default_client_rate,
-                transporter_rate=swiftline.default_transporter_rate,
+                transporter_rate=delta.default_transporter_rate,
                 client_penalty_rate=northbridge.default_penalty_rate,
-                transporter_penalty_rate=swiftline.default_penalty_rate,
+                transporter_penalty_rate=delta.default_penalty_rate,
                 created_by=erick.id,
                 loaded_date=now - timedelta(hours=8),
                 loaded_tonnage=23.4,
@@ -321,11 +377,11 @@ def seed():
                 origin="Shurugwi",
                 status=models.BookingStatus.BOOKED,
                 client_id=icebay.id,
-                transporter_id=horizon.id,
-                client_rate=icebay.default_client_rate,
+                transporter_id=atlas.id,
+                client_rate=44.0,
                 transporter_rate=horizon.default_transporter_rate,
-                client_penalty_rate=icebay.default_penalty_rate,
-                transporter_penalty_rate=horizon.default_penalty_rate,
+                client_penalty_rate=195.0,
+                transporter_penalty_rate=atlas.default_penalty_rate,
                 created_by=erick.id,
             ),
         )
@@ -464,7 +520,7 @@ def seed():
         print("  erick    / erick123      (ADMIN)")
         print("  lyn      / lyn123        (TRACKING)")
         print("  precious / password123   (BOOKING)")
-        print("  connie   / connie123     (ACCOUNTS)")
+        print("  edina    / edina123      (ACCOUNTS)")
     finally:
         db.close()
 

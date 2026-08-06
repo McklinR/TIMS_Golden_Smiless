@@ -283,6 +283,7 @@ function bookingCard(booking, clientMap, transporterMap, canCancel = false) {
       </div>
       <div class="record-meta-grid">
         <div><span>Client</span><strong>${escapeHtml(client?.name || `Client #${booking.client_id}`)}</strong></div>
+        <div><span>Client Rate</span><strong>${fmtMoney(booking.client_rate)}/t</strong></div>
         <div><span>Transporter</span><strong>${escapeHtml(transporter?.name || `Transporter #${booking.transporter_id}`)}</strong></div>
         <div><span>Booked</span><strong class="mono">${fmtDate(booking.booking_date)}</strong></div>
         <div><span>ETA</span><strong class="mono">${fmtDate(booking.eta)}</strong></div>
@@ -432,7 +433,7 @@ async function renderBookings(container) {
         <label class="field-label">Client
           <select class="field-input" name="client_id" required>
             <option value="">Select client</option>
-            ${clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)} ($${c.default_client_rate}/t)</option>`).join("")}
+            ${clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)} ($${c.current_client_rate ?? c.default_client_rate}/t)</option>`).join("")}
           </select>
         </label>
         <label class="field-label">Transporter
@@ -885,7 +886,7 @@ async function renderOffloading(container) {
 }
 
 // =================================================================
-// ACCOUNTS (Connie's workflow: deposit / balance / mark paid)
+// ACCOUNTS (Edina's workflow: deposit / balance / mark paid)
 // =================================================================
 async function renderAccounts(container) {
   const bookings = await api("/bookings");
@@ -950,7 +951,7 @@ async function renderAdmin(container) {
     { username: "erick", full_name: "Erick Logistics", role: "ADMIN" },
     { username: "lyn", full_name: "Lyn Operations", role: "TRACKING" },
     { username: "precious", full_name: "Precious Smiles", role: "BOOKING" },
-    { username: "connie", full_name: "Connie Finance", role: "ACCOUNTS" },
+    { username: "edina", full_name: "Edina Finance", role: "ACCOUNTS" },
   ];
 
   container.innerHTML = `
@@ -1010,9 +1011,21 @@ async function renderAdmin(container) {
       <table>
         <thead><tr><th>Name</th><th>Contact</th><th>Client Rate</th><th>Penalty Rate</th></tr></thead>
         <tbody>
-          ${clients.map(c => `<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.contact_name || "—")}</td><td class="mono">$${c.default_client_rate}/t</td><td class="mono">$${c.default_penalty_rate}/t</td></tr>`).join("")}
+          ${clients.map(c => `<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.contact_name || "—")}</td><td class="mono">$${(c.current_client_rate ?? c.default_client_rate)}/t</td><td class="mono">$${(c.current_penalty_rate ?? c.default_penalty_rate)}/t</td></tr>`).join("")}
         </tbody>
       </table>
+      <form id="client-rate-form" class="form-grid" style="margin-top:16px">
+        <label class="field-label">Client
+          <select class="field-input" name="client_id" required>
+            ${clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("")}
+          </select>
+        </label>
+        <label class="field-label">Client Rate ($/t)<input class="field-input" type="number" step="0.01" name="client_rate" required></label>
+        <label class="field-label">Penalty Rate ($/lost t)<input class="field-input" type="number" step="0.01" name="penalty_rate" required></label>
+        <label class="field-label">Effective From<input class="field-input" type="datetime-local" name="effective_from"></label>
+        <label class="field-label" style="grid-column:1/-1">Notes<input class="field-input" name="notes" placeholder="Contract change, terminal renegotiation, etc."></label>
+        <div class="form-actions" style="grid-column:1/-1"><button class="btn btn-secondary btn-sm" type="submit">Add Rate Change</button></div>
+      </form>
       <form id="client-form" class="form-grid" style="margin-top:16px">
         <label class="field-label">Name<input class="field-input" name="name" required></label>
         <label class="field-label">Contact Name<input class="field-input" name="contact_name"></label>
@@ -1096,6 +1109,29 @@ async function renderAdmin(container) {
       await api("/clients", { method: "POST", body: payload });
       state.clientsCache = null;
       toast("Client added.");
+      navigate("admin");
+    } catch (err) { toast(err.message, true); }
+  });
+
+  document.getElementById("client-rate-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = Object.fromEntries(new FormData(e.target).entries());
+    payload.client_id = Number(payload.client_id);
+    payload.client_rate = Number(payload.client_rate);
+    payload.penalty_rate = Number(payload.penalty_rate);
+    if (payload.effective_from) payload.effective_from = new Date(payload.effective_from).toISOString();
+    try {
+      await api(`/clients/${payload.client_id}/rate-history`, {
+        method: "POST",
+        body: {
+          client_rate: payload.client_rate,
+          penalty_rate: payload.penalty_rate,
+          effective_from: payload.effective_from,
+          notes: payload.notes,
+        },
+      });
+      state.clientsCache = null;
+      toast("Client rate updated.");
       navigate("admin");
     } catch (err) { toast(err.message, true); }
   });

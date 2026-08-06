@@ -1,114 +1,136 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TIMS — Golden Smiles Freight &amp; Distribution</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TIMS — Golden Smiles Freight &amp; Distribution</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
 </head>
+
 <body>
 
-<!-- ===================== LOGIN SCREEN ===================== -->
-<div id="login-screen" class="login-screen">
-  <div class="login-card">
-    <div class="login-mark">
-      <span class="login-mark-ring"></span>
-      <span class="login-mark-text">GS</span>
-    </div>
-    <h1 class="login-title">TIMS</h1>
-    <p class="login-sub">Golden Smiles Freight &amp; Distribution</p>
-    <p class="login-tag">Shop 6L, 148 Chiremba Rd, Queensdale, Harare</p>
+  <!-- ===================== LOGIN SCREEN ===================== -->
+  <div id="login-screen" class="login-screen">
+    <div class="login-card">
+      <div class="login-mark">
+        <span class="login-mark-ring"></span>
+        <span class="login-mark-text">GS</span>
+      </div>
+      <h1 class="login-title">TIMS</h1>
+      <p class="login-sub">Golden Smiles Freight &amp; Distribution</p>
+      <p class="login-tag">Shop 6L, 148 Chiremba Rd, Queensdale, Harare</p>
 
-    <form id="login-form" class="login-form" autocomplete="off">
-      <label class="field-label">Username
-        <input class="field-input" type="text" id="login-username" required placeholder="e.g. erick">
-      </label>
-      <label class="field-label">Password
-        <input class="field-input" type="password" id="login-password" required placeholder="••••••••">
-      </label>
-      <button type="submit" class="btn btn-primary btn-block">Sign in</button>
-      <p id="login-error" class="login-error"></p>
-    </form>
+      <form id="login-form" class="login-form" autocomplete="off">
+        <label class="field-label">Username
+          <input class="field-input" type="text" id="login-username" required placeholder="e.g. erick">
+        </label>
+        <label class="field-label">Password
+          <input class="field-input" type="password" id="login-password" required placeholder="••••••••">
+        </label>
+        <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+        <p id="login-error" class="login-error"></p>
+      </form>
 
-    <div class="login-hint">
-      <span class="ticket-dot"></span> Demo accounts: director / erick / lyn / precious / connie
-      <br><span class="login-hint-muted">password = username + "123", e.g. erick123</span>
+      <div class="login-hint">
+        <span class="ticket-dot"></span> Demo accounts: director / erick / lyn / precious / edina
+        <br><span class="login-hint-muted">password = username + "123", e.g. erick123</span>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- ===================== APP SHELL ===================== -->
-<div id="app-shell" class="app-shell hidden">
+  <!-- ===================== APP SHELL ===================== -->
+  <div id="app-shell" class="app-shell hidden">
 
-  <aside class="rail">
-    <div class="rail-brand">
-      <span class="rail-mark">GS</span>
-      <div class="rail-brand-text">
-        <strong>TIMS</strong>
-        <small>Golden Smiles</small>
-      </div>
-    </div>
-
-    <nav class="rail-nav" id="rail-nav">
-      <button class="rail-item" data-view="dashboard">
-        <svg viewBox="0 0 24 24"><path d="M3 13h4v8H3zM10 3h4v18h-4zM17 8h4v13h-4z"/></svg>
-        Dashboard
-      </button>
-      <button class="rail-item" data-view="bookings">
-        <svg viewBox="0 0 24 24"><path d="M4 4h16v4H4zM4 10h16v10H4z"/></svg>
-        Bookings
-      </button>
-      <button class="rail-item" data-view="loading" data-roles="ADMIN,BOOKING">
-        <svg viewBox="0 0 24 24"><path d="M3 17l4-8 4 4 3-6 7 10z"/></svg>
-        Loading
-      </button>
-      <button class="rail-item" data-view="tracking" data-roles="ADMIN,TRACKING">
-        <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 00-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 00-7-7zm0 9.5A2.5 2.5 0 1112 6a2.5 2.5 0 010 5.5z"/></svg>
-        Tracking
-      </button>
-      <button class="rail-item" data-view="offloading" data-roles="ADMIN,TRACKING,BOOKING">
-        <svg viewBox="0 0 24 24"><path d="M3 3h18v6H3zM3 11h18v10H3z"/></svg>
-        Offloading
-      </button>
-      <button class="rail-item" data-view="accounts" data-roles="ADMIN,ACCOUNTS">
-        <svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-        Accounts
-      </button>
-      <button class="rail-item" data-view="admin" data-roles="ADMIN">
-        <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 10h16M10 10v10"/></svg>
-        Admin
-      </button>
-    </nav>
-
-    <div class="rail-footer">
-      <div class="rail-user">
-        <span class="rail-user-dot" id="rail-user-dot"></span>
-        <div>
-          <strong id="rail-user-name">—</strong>
-          <small id="rail-user-role">—</small>
+    <aside class="rail">
+      <div class="rail-brand">
+        <span class="rail-mark">GS</span>
+        <div class="rail-brand-text">
+          <strong>TIMS</strong>
+          <small>Golden Smiles</small>
         </div>
       </div>
-      <button class="rail-logout" id="logout-btn" title="Sign out">
-        <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
-      </button>
-    </div>
-  </aside>
 
-  <main class="main">
-    <header class="topbar">
-      <h2 id="view-title">Dashboard</h2>
-      <div class="topbar-meta">
-        <span id="clock" class="clock"></span>
+      <nav class="rail-nav" id="rail-nav">
+        <button class="rail-item" data-view="dashboard">
+          <svg viewBox="0 0 24 24">
+            <path d="M3 13h4v8H3zM10 3h4v18h-4zM17 8h4v13h-4z" />
+          </svg>
+          Dashboard
+        </button>
+        <button class="rail-item" data-view="bookings">
+          <svg viewBox="0 0 24 24">
+            <path d="M4 4h16v4H4zM4 10h16v10H4z" />
+          </svg>
+          Bookings
+        </button>
+        <button class="rail-item" data-view="loading" data-roles="ADMIN,BOOKING">
+          <svg viewBox="0 0 24 24">
+            <path d="M3 17l4-8 4 4 3-6 7 10z" />
+          </svg>
+          Loading
+        </button>
+        <button class="rail-item" data-view="tracking" data-roles="ADMIN,TRACKING">
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M12 2a7 7 0 00-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 00-7-7zm0 9.5A2.5 2.5 0 1112 6a2.5 2.5 0 010 5.5z" />
+          </svg>
+          Tracking
+        </button>
+        <button class="rail-item" data-view="offloading" data-roles="ADMIN,TRACKING,BOOKING">
+          <svg viewBox="0 0 24 24">
+            <path d="M3 3h18v6H3zM3 11h18v10H3z" />
+          </svg>
+          Offloading
+        </button>
+        <button class="rail-item" data-view="accounts" data-roles="ADMIN,ACCOUNTS">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+          </svg>
+          Accounts
+        </button>
+        <button class="rail-item" data-view="admin" data-roles="ADMIN">
+          <svg viewBox="0 0 24 24">
+            <path d="M4 4h16v16H4zM4 10h16M10 10v10" />
+          </svg>
+          Admin
+        </button>
+      </nav>
+
+      <div class="rail-footer">
+        <div class="rail-user">
+          <span class="rail-user-dot" id="rail-user-dot"></span>
+          <div>
+            <strong id="rail-user-name">—</strong>
+            <small id="rail-user-role">—</small>
+          </div>
+        </div>
+        <button class="rail-logout" id="logout-btn" title="Sign out">
+          <svg viewBox="0 0 24 24">
+            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+          </svg>
+        </button>
       </div>
-    </header>
-    <div id="view" class="view"></div>
-  </main>
-</div>
+    </aside>
 
-<div id="toast" class="toast"></div>
+    <main class="main">
+      <header class="topbar">
+        <h2 id="view-title">Dashboard</h2>
+        <div class="topbar-meta">
+          <span id="clock" class="clock"></span>
+        </div>
+      </header>
+      <div id="view" class="view"></div>
+    </main>
+  </div>
 
-<script src="/static/js/app.js"></script>
+  <div id="toast" class="toast"></div>
+
+  <script src="/static/js/app.js"></script>
 </body>
+
 </html>

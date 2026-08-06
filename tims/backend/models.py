@@ -73,6 +73,7 @@ class Client(Base):
     notes = Column(Text)
 
     bookings = relationship("Booking", back_populates="client")
+    rate_history = relationship("ClientRateHistory", back_populates="client", order_by="ClientRateHistory.effective_from")
 
 
 class Transporter(Base):
@@ -87,6 +88,19 @@ class Transporter(Base):
     notes = Column(Text)
 
     bookings = relationship("Booking", back_populates="transporter")
+
+
+class ClientRateHistory(Base):
+    __tablename__ = "client_rate_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
+    client_rate = Column(Float, nullable=False)
+    penalty_rate = Column(Float, nullable=False, default=0.0)
+    effective_from = Column(DateTime, default=datetime.utcnow, nullable=False)
+    notes = Column(Text)
+
+    client = relationship("Client", back_populates="rate_history")
 
 
 class Booking(Base):

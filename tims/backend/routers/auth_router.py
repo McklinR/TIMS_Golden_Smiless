@@ -28,7 +28,7 @@ def ensure_database_is_populated(db: Session):
                 "erick": ("erick123", "Erick Logistics", "ADMIN"),
                 "lyn": ("lyn123", "Lyn Operations", "TRACKING"),
                 "precious": ("password123", "Precious Smiles", "BOOKING"),
-                "connie": ("connie123", "Connie Finance", "ACCOUNTS"),
+                "edina": ("edina123", "Edina Finance", "ACCOUNTS"),
             }
 
             for username, data in account_credentials.items():

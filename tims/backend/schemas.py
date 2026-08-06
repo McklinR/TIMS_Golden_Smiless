@@ -59,6 +59,25 @@ class ClientCreate(BaseModel):
 class ClientOut(ClientCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    current_client_rate: Optional[float] = None
+    current_penalty_rate: Optional[float] = None
+
+
+class ClientRateHistoryCreate(BaseModel):
+    client_rate: float
+    penalty_rate: float = 0.0
+    effective_from: Optional[datetime] = None
+    notes: Optional[str] = None
+
+
+class ClientRateHistoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    client_id: int
+    client_rate: float
+    penalty_rate: float
+    effective_from: datetime
+    notes: Optional[str] = None
 
 
 class TransporterCreate(BaseModel):
